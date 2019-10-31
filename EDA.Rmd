@@ -1,0 +1,469 @@
+---
+title: "Crash Reporting EDA"
+author: "Michael Metzler"
+date: "10/25/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width = 12, fig.height = 6, tidy = "styler", df.print = "kable")
+```
+
+# Setup
+
+```{r loading, message=FALSE}
+library(tidyverse)
+library(lubridate)
+library(leaflet)
+incidents <- feather::read_feather("incidents.feather")
+drivers <- feather::read_feather("drivers.feather")
+non_motorists <- feather::read_feather("non_motorists.feather")
+single_color <- "#3182bd"
+basic_theme <- theme(
+  plot.title = element_text(size = 24, vjust = .5, hjust = .5),
+  axis.title = element_text(size = 16, hjust = .5, vjust = .5),
+  panel.background = element_rect(fill = "white"),
+  legend.position = "none",
+  panel.grid.major.y = element_line(color = "grey75", size = .1, linetype = "solid")
+)
+```
+
+# Incidents
+
+This is a quick overview of the structure of the Incidents table.
+
+```{r skimincidents}
+skimr::skim_to_wide(incidents) %>% DT::datatable()
+```
+
+There have been `r sum(incidents$acrs_report_type == "Fatal Crash")` fatal crashes out of `r nrow(incidents)` recorded incidents since this data set began in 2015.
+
+```{r incidenttypes}
+incidents %>%
+  group_by(acrs_report_type) %>%
+  count() %>%
+  knitr::kable()
+```
+
+## Location of Incidents
+
+This interactive map shows the locations of the incidents in the data set. The `r incidents %>% pull(not_in_county) %>% sum()` incidents that do not fall within the limits of the county are colored red.
+
+```{r}
+pal <- colorFactor(c("blue", "red"), domain = c(0, 1))
+incidents %>%
+  leaflet() %>%
+  addTiles() %>%
+  addCircleMarkers(lng = ~longitude, lat = ~latitude, radius = 3, stroke = TRUE, weight = 2, opacity = 1, color = ~ pal(not_in_county))
+```
+
+## Time variables
+
+Crashes peak around 5:00 PM, which lines up with the evening rush hour. It seems that the report times are often rounded to the nearest fifteen or five minute round number. 
+
+```{r}
+incidents %>%
+  select(incident_hour, incident_minute) %>%
+  mutate(incident_time = 60 * incident_hour + incident_minute) %>%
+  ggplot() +
+  stat_count(aes(x = incident_time), fill = single_color) +
+  scale_x_continuous(
+    name = "Time",
+    breaks = seq.int(from = 0, to = 24 * 60, by = 120),
+    labels = c(paste0(seq.int(from = 0, to = 22, by = 2), ":00"),"0:00")
+  ) +
+  ggtitle("Crashes by Time of Day") +
+  basic_theme
+```
+
+Crashes are slightly less frequent on the weekends than on weekdays.
+
+```{r}
+incidents %>%
+  select(incident_weekday) %>%
+  ggplot() +
+  stat_count(aes(x = incident_weekday), fill = single_color) +
+  scale_x_continuous(
+    name = "Day of Week",
+    breaks = 1:7,
+    labels = c("Sunday", "Monday", "Tuesday", "Wednesday", "Thurday", "Friday", "Saturday")
+  ) +
+  ggtitle("Crashes by Day of Week") +
+  basic_theme
+```
+
+The number of crashes seems to be fairly constant over time.
+
+```{r}
+incidents %>%
+  select(incident_year) %>%
+  ggplot() +
+  stat_count(aes(x = incident_year), fill = single_color) +
+  ggtitle("Crashes by Year") +
+  basic_theme
+```
+
+This table contains the number of crashes recorded on each date. 2019 is excluded because the year hasn't concluded and the counts for dates that already have happened would be inflated. The dates with the most crashes tend to come from the last four months of the year, but holidays including Christmas and New Years are among the days with the fewest crashes.
+
+```{r}
+incidents %>%
+  filter(incident_year < 2019) %>%
+  select(incident_month, incident_day) %>%
+  mutate(incident_date = paste0(incident_month, "/", incident_day)) %>%
+  count(incident_date) %>%
+  arrange(desc(n)) %>%
+  rename(Date = incident_date, `Number of Crashes` = n) %>%
+  DT::datatable()
+```
+
+## Weather
+
+Most crashes come under clear weather conditions.
+
+```{r incidentsweather}
+incidents %>%
+  group_by(weather) %>%
+  count() %>%
+  arrange(desc(n)) %>%
+  knitr::kable()
+```
+
+## Substance Abuse
+
+Crashes involving alcohol and illegal drugs constitute a small minority of the total incidents.
+
+```{r}
+incidents %>%
+  mutate(alcohol = driver_substance_abuse_alcohol_present | driver_substance_abuse_alcohol_contributed) %>%
+  count(alcohol) %>%
+  knitr::kable()
+```
+
+```{r}
+incidents %>%
+  count(driver_substance_abuse_alcohol_contributed) %>%
+  knitr::kable()
+```
+
+```{r}
+incidents %>%
+  count(driver_substance_abuse_alcohol_present) %>%
+  knitr::kable()
+```
+
+```{r}
+incidents %>%
+  mutate(illegal_drug = driver_substance_abuse_illegal_drug_present | driver_substance_abuse_illegal_drug_contributed) %>%
+  count(illegal_drug) %>%
+  knitr::kable()
+```
+
+```{r}
+incidents %>%
+  count(driver_substance_abuse_illegal_drug_contributed) %>%
+  knitr::kable()
+```
+
+```{r}
+incidents %>%
+  count(driver_substance_abuse_illegal_drug_present) %>%
+  knitr::kable()
+```
+
+## Alcohol and Time
+
+Crashes involving alcohol do not follow the general time of day trends of crashes as a whole. The late night and early morning hours see more crashes than the daylight hours.
+
+```{r}
+incidents %>%
+  filter(driver_substance_abuse_alcohol_present | driver_substance_abuse_alcohol_contributed) %>%
+  select(incident_hour, incident_minute) %>%
+  mutate(incident_time = 60 * incident_hour + incident_minute) %>%
+  ggplot() +
+  stat_count(aes(x = incident_time), fill = single_color) +
+  scale_x_continuous(
+    name = "Time",
+    breaks = seq.int(from = 0, to = 24 * 60, by = 120),
+    labels = paste0(seq.int(from = 0, to = 24, by = 2), ":00")
+  ) +
+  ggtitle("Crashes Involving Alcohol by Time of Day") +
+  basic_theme
+```
+
+Weekends see more alchol related crashes than weekdays, the opposite of the trend for all crashes.
+
+```{r}
+incidents %>%
+  filter(driver_substance_abuse_alcohol_present | driver_substance_abuse_alcohol_contributed) %>%
+  select(incident_weekday) %>%
+  ggplot() +
+  stat_count(aes(x = incident_weekday), fill = single_color) +
+  scale_x_continuous(
+    name = "Day of Week",
+    breaks = 1:7,
+    labels = c("Sunday", "Monday", "Tuesday", "Wednesday", "Thurday", "Friday", "Saturday")
+  ) +
+  ggtitle("Crashes Involving Alcohol by Day of Week") +
+  basic_theme
+```
+
+# Drivers
+
+Overview of the drivers table structure.
+
+```{r skimdrivers}
+skimr::skim_to_wide(drivers) %>% DT::datatable()
+```
+
+
+## Driver Injuries
+
+`r (as.integer(10000 * mean(drivers$injury_severity == "NO APPARENT INJURY"))) / 100`% of drivers did not sustain any reported injuries. `r (as.integer(10000 * mean(drivers$injury_severity %in% c("SUSPECTED SERIOUS INJURY", "FATAL INJURY"))))/100`% of Drivers suffered serious or fatal injuries.
+
+```{r}
+ordered_levels <- drivers %>%
+  count(injury_severity) %>%
+  arrange(desc(n)) %>%
+  pull(injury_severity)
+drivers %>%
+  mutate(`Injury Severity` = factor(injury_severity, ordered_levels)) %>%
+  ggplot() +
+  stat_count(aes(x = `Injury Severity`), fill = single_color) +
+  ggtitle("Severity of Driver Injuries") +
+  basic_theme
+```
+
+```{r}
+drivers %>%
+  count(injury_severity) %>%
+  arrange(n) %>%
+  knitr::kable()
+```
+
+## Vehichle Damage
+
+Most reported accidents involved at least some vehicle damage. Just `r as.integer(10000 * mean(drivers$vehicle_damage_extent_no_damage))/100`% of drivers reported no vehicle damage.
+
+```{r}
+ordered_levels <- drivers %>%
+  count(vehicle_damage_extent) %>%
+  arrange(desc(n)) %>%
+  pull(vehicle_damage_extent)
+drivers %>%
+  mutate(`Vehicle Damage` = factor(vehicle_damage_extent, ordered_levels)) %>%
+  ggplot() +
+  stat_count(aes(x = `Vehicle Damage`), fill = single_color) +
+  ggtitle("Severity of Vehicle Damage") +
+  basic_theme
+```
+
+```{r}
+drivers %>%
+  count(vehicle_damage_extent) %>%
+  arrange(desc(n)) %>%
+  knitr::kable()
+```
+
+## Speed Limits
+
+```{r}
+drivers %>%
+  ggplot() +
+  stat_count(aes(x = speed_limit, fill = ), fill = single_color) +
+  ggtitle("Speed Limits") +
+  basic_theme
+```
+```{r}
+ordered_injury <- drivers %>%
+  count(injury_severity) %>%
+  arrange(desc(n)) %>%
+  pull(injury_severity)
+drivers %>%
+  mutate(
+    `Speed Limit` = factor(c("LOW", "MEDIUM", "HIGH")[1 + findInterval(speed_limit, c(31, 46))], levels = c("LOW", "MEDIUM", "HIGH")),
+    `Injury Severity` = factor(injury_severity, ordered_injury)
+  ) %>%
+  ggplot() +
+  stat_count(aes(x = `Injury Severity`, fill = `Speed Limit`)) +
+  basic_theme +
+  theme(legend.position = c(.9, .9)) +
+  ggtitle("Injuries and Speed Limits")
+```
+
+```{r}
+ordered_injury <- drivers %>%
+  count(injury_severity) %>%
+  arrange(desc(n)) %>%
+  pull(injury_severity)
+drivers %>%
+  mutate(
+    speed_limit = factor(c("LOW", "MEDIUM", "HIGH")[1 + findInterval(speed_limit, c(31, 46))], levels = c("LOW", "MEDIUM", "HIGH")),
+    injury_severity = factor(injury_severity, ordered_injury)
+  ) %>%
+  group_by(speed_limit, injury_severity) %>%
+  tally() %>%
+  rename(`Speed Limit` = speed_limit, `Injury Severity` = injury_severity) %>%
+  ggplot() +
+  geom_bar(aes(x = `Injury Severity`, weight = n, fill = `Speed Limit`), position = "fill") +
+  basic_theme +
+  theme(legend.position = "top") +
+  ggtitle("Injuries and Speed Limits") + 
+  ylab("Proportion")
+```
+
+## Types of Vehicles
+
+```{r}
+ordered_levels <- drivers %>%
+  count(vehicle_body_type) %>%
+  arrange(desc(n)) %>%
+  pull(vehicle_body_type)
+drivers %>%
+  mutate(`Body Type` = factor(as.character(fct_collapse(vehicle_body_type, OTHER = ordered_levels[-(1:5)])), c(ordered_levels[1:5], "OTHER"))) %>%
+  ggplot() +
+  stat_count(aes(x = `Body Type`), fill = single_color) +
+  ggtitle("Vehicle Body Types") +
+  basic_theme
+```
+
+# Non-Motorists
+
+Overview of Non-Motorists table structure
+
+```{r skimnonmotorists}
+skimr::skim_to_wide(non_motorists) %>% DT::datatable()
+```
+
+## Types of Non Motorists
+
+Pedestrians are the most common type of non motorist, followed by bicyclists.
+
+```{r}
+ordered_levels <- non_motorists %>%
+  count(pedestrian_type) %>%
+  arrange(desc(n)) %>%
+  pull(pedestrian_type)
+non_motorists %>%
+  mutate(pedestrian_type = factor(pedestrian_type, ordered_levels)) %>%
+  ggplot() +
+  stat_count(aes(x = pedestrian_type), fill = single_color) +
+  basic_theme +
+  ggtitle("Types of Non-Motorists")
+```
+
+
+## Locations of Incidents Involving Non-Motorists
+
+```{r}
+pal <- colorFactor(c("blue", "red"), domain = c(0, 1))
+non_motorists %>%
+  leaflet() %>%
+  addTiles() %>%
+  addCircleMarkers(lng = ~longitude, lat = ~latitude, radius = 3, stroke = TRUE, weight = 2, opacity = 1, color = ~ pal(not_in_county))
+```
+
+## Injuries
+
+`r (as.integer(10000 * mean(non_motorists$injury_severity == "NO APPARENT INJURY"))) / 100`% of non-motorists did not sustain any reported injuries. `r (as.integer(10000 * mean(non_motorists$injury_severity %in% c("SUSPECTED SERIOUS INJURY", "FATAL INJURY"))))/100`% of non-motorists suffered serious or fatal injuries.
+
+```{r}
+ordered_levels <- non_motorists %>%
+  count(injury_severity) %>%
+  arrange(desc(n)) %>%
+  pull(injury_severity)
+non_motorists %>%
+  mutate(`Injury Severity` = factor(injury_severity, ordered_levels)) %>%
+  ggplot() +
+  stat_count(aes(x = `Injury Severity`), fill = single_color) +
+  ggtitle("Severity of Non Motorist Injuries") +
+  basic_theme
+```
+
+```{r}
+non_motorists %>%
+  count(injury_severity) %>%
+  arrange(n) %>%
+  knitr::kable()
+```
+
+## Bicycle Helmet Usage
+
+```{r}
+ordered_levels <- non_motorists %>%
+  filter(pedestrian_type == "BICYCLIST") %>%
+  count(safety_equipment) %>%
+  arrange(desc(n)) %>%
+  pull(safety_equipment)
+non_motorists %>%
+  filter(pedestrian_type == "BICYCLIST") %>%
+  mutate(`Safety Equipment` = factor(safety_equipment, ordered_levels)) %>%
+  ggplot() +
+  stat_count(aes(x = `Safety Equipment`), fill = single_color) +
+  basic_theme +
+  ggtitle("What Kinds of Safety Equiptment Do Bicyclists Use?")
+```
+
+The more severe injuries tend to have lower rates of helmet usage than minor injuries.
+
+```{r}
+ordered_safety <- non_motorists %>%
+  filter(pedestrian_type == "BICYCLIST") %>%
+  count(safety_equipment) %>%
+  arrange(desc(n)) %>%
+  pull(safety_equipment)
+ordered_injury <- non_motorists %>%
+  filter(pedestrian_type == "BICYCLIST") %>%
+  count(injury_severity) %>%
+  arrange(desc(n)) %>%
+  pull(injury_severity)
+non_motorists %>%
+  filter(pedestrian_type == "BICYCLIST") %>%
+  mutate(
+    `Safety Equipment` = fct_collapse(safety_equipment, OTHER = ordered_safety[-(1:2)]),
+    `Injury Severity` = factor(injury_severity, ordered_injury)
+  ) %>%
+  ggplot() +
+  stat_count(aes(x = `Injury Severity`, fill = `Safety Equipment`)) +
+  basic_theme +
+  theme(legend.position = c(.9, .9)) +
+  ggtitle("Injuries and Helmets")
+```
+
+
+# Consistency Check
+
+```{r}
+fatal_drivers<-drivers %>% filter(injury_severity_fatal_injury == 1) %>% pull(report_number)
+fatal_nonm <- non_motorists %>% filter(injury_severity_fatal_injury == 1) %>% pull(report_number)
+fatal_acrs <- incidents %>% filter(acrs_report_type_fatal_crash == 1) %>% pull(report_number)
+recorded_fatal <- c(fatal_drivers, fatal_nonm)
+# vector of fatal reports with no recorded fatality
+probs <- fatal_acrs %>% .[!. %in% recorded_fatal]
+```
+
+```{r}
+incidents %>% filter(report_number %in% probs) %>% DT::datatable(options = list(pageLength = 5))
+```
+
+```{r}
+drivers %>% filter(report_number %in% probs) %>% DT::datatable(options = list(pageLength = 5))
+```
+
+```{r}
+non_motorists %>% filter(report_number %in% probs) %>% DT::datatable(options = list(pageLength = 5))
+```
+```{r}
+drivers %>% group_by(report_number) %>% tally() %>% arrange(desc(n))
+```
+
+```{r}
+drivers %>% count(report_number) %>% count(n) %>% rename(`Vehicles Involved` = n) %>% knitr::kable()
+```
+```{r}
+non_motorists %>% group_by(report_number) %>% tally() %>% arrange(desc(n))
+```
+
+```{r}
+non_motorists %>% count(report_number) %>% count(n) %>% rename(`non_motorists Involved` = n) %>% knitr::kable()
+
+```
