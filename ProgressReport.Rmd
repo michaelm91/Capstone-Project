@@ -1,0 +1,250 @@
+---
+title: "Montgomery County Traffic Incidents"
+author: "Michael Metzler"
+institute: "Montgomery College"
+date: "`r Sys.Date()`"
+output:
+  xaringan::moon_reader:
+    lib_dir: libs
+    nature:
+      ratio: "16:9"
+      highlightStyle: github
+      highlightLines: false
+      countIncrementalSlides: false
+---
+
+```{r setup, include=FALSE}
+options(htmltools.dir.version = FALSE)
+knitr::opts_chunk$set(echo = FALSE, fig.width = 12, fig.height = 6, dpi = 300)
+library(tidyverse)
+library(lubridate)
+library(leaflet)
+incidents <- feather::read_feather("incidents.feather")
+drivers <- feather::read_feather("drivers.feather")
+non_motorists <- feather::read_feather("non_motorists.feather")
+single_color <- "#3182bd"
+basic_theme <- theme(
+  plot.title = element_text(size = 24, vjust = .5, hjust = .5),
+  axis.title = element_text(size = 16, hjust = .5, vjust = .5),
+  panel.background = element_rect(fill = "white"),
+  legend.position = "none",
+  panel.grid.major.y = element_line(color = "grey75", size = .1, linetype = "solid")
+)
+```
+
+class: center, top
+
+# Automated Crash Reporting System
+
+ACRS has logged `r nrow(incidents)` incidents since January 1st 2015.
+
+```{r incidenttypes}
+incidents %>%
+  group_by(acrs_report_type) %>%
+  count() %>%
+  rename(`Report Type` = acrs_report_type, Incidents = n) %>%
+  knitr::kable(format = "html")
+```
+
+---
+class: center, middle
+
+```{r}
+incidents %>%
+  select(incident_hour, incident_minute) %>%
+  mutate(incident_time = 60 * incident_hour + incident_minute) %>%
+  ggplot() +
+  stat_count(aes(x = incident_time), fill = single_color) +
+  scale_x_continuous(
+    name = "Time",
+    breaks = seq.int(from = 0, to = 24 * 60, by = 120),
+    labels = c(paste0(seq.int(from = 0, to = 22, by = 2), ":00"),"0:00")
+  ) +
+  ggtitle("Crashes by Time of Day") +
+  basic_theme
+```
+
+---
+
+```{r}
+incidents %>%
+  select(incident_weekday) %>%
+  ggplot() +
+  stat_count(aes(x = incident_weekday), fill = single_color) +
+  scale_x_continuous(
+    name = "Day of Week",
+    breaks = 1:7,
+    labels = c("Sunday", "Monday", "Tuesday", "Wednesday", "Thurday", "Friday", "Saturday")
+  ) +
+  ggtitle("Crashes by Day of Week") +
+  basic_theme
+```
+
+---
+
+```{r}
+incidents %>%
+  select(incident_year) %>%
+  ggplot() +
+  stat_count(aes(x = incident_year), fill = single_color) +
+  ggtitle("Crashes by Year") +
+  basic_theme
+```
+---
+class: center
+# Number of Crashes by Date
+```{r}
+incidents %>%
+  filter(incident_year < 2019) %>%
+  select(incident_month, incident_day) %>%
+  mutate(incident_date = paste0(incident_month, "/", incident_day)) %>%
+  count(incident_date) %>%
+  arrange(desc(n)) %>%
+  rename(Date = incident_date, `Number of Crashes` = n) %>%
+  DT::datatable()
+```
+
+---
+class: center
+# Weather
+
+```{r incidentsweather}
+incidents %>%
+  group_by(weather) %>%
+  count() %>%
+  arrange(desc(n)) %>%
+  knitr::kable(format="html")
+```
+
+---
+
+class: center
+
+```{r}
+incidents %>%
+  filter(driver_substance_abuse_alcohol_present | driver_substance_abuse_alcohol_contributed) %>%
+  select(incident_hour, incident_minute) %>%
+  mutate(incident_time = 60 * incident_hour + incident_minute) %>%
+  ggplot() +
+  stat_count(aes(x = incident_time), fill = single_color) +
+  scale_x_continuous(
+    name = "Time",
+    breaks = seq.int(from = 0, to = 24 * 60, by = 120),
+    labels = paste0(seq.int(from = 0, to = 24, by = 2), ":00")
+  ) +
+  ggtitle("Crashes Involving Alcohol by Time of Day") +
+  basic_theme
+```
+
+---
+
+```{r}
+incidents %>%
+  filter(driver_substance_abuse_alcohol_present | driver_substance_abuse_alcohol_contributed) %>%
+  select(incident_weekday) %>%
+  ggplot() +
+  stat_count(aes(x = incident_weekday), fill = single_color) +
+  scale_x_continuous(
+    name = "Day of Week",
+    breaks = 1:7,
+    labels = c("Sunday", "Monday", "Tuesday", "Wednesday", "Thurday", "Friday", "Saturday")
+  ) +
+  ggtitle("Crashes Involving Alcohol by Day of Week") +
+  basic_theme
+```
+
+---
+
+class: center
+
+```{r}
+ordered_levels <- drivers %>%
+  count(injury_severity) %>%
+  arrange(desc(n)) %>%
+  pull(injury_severity)
+drivers %>%
+  mutate(`Injury Severity` = factor(injury_severity, ordered_levels)) %>%
+  ggplot() +
+  stat_count(aes(x = `Injury Severity`), fill = single_color) +
+  ggtitle("Severity of Driver Injuries") +
+  basic_theme
+```
+---
+class: center
+```{r}
+ordered_levels <- drivers %>%
+  count(vehicle_damage_extent) %>%
+  arrange(desc(n)) %>%
+  pull(vehicle_damage_extent)
+drivers %>%
+  mutate(`Vehicle Damage` = factor(vehicle_damage_extent, ordered_levels)) %>%
+  ggplot() +
+  stat_count(aes(x = `Vehicle Damage`), fill = single_color) +
+  ggtitle("Severity of Vehicle Damage") +
+  basic_theme
+```
+---
+class: center
+```{r}
+drivers %>%
+  ggplot() +
+  stat_count(aes(x = speed_limit, fill = ), fill = single_color) +
+  ggtitle("Speed Limits") +
+  basic_theme
+```
+---
+class: center
+```{r}
+ordered_injury <- drivers %>%
+  count(injury_severity) %>%
+  arrange(desc(n)) %>%
+  pull(injury_severity)
+drivers %>%
+  mutate(
+    speed_limit = factor(c("LOW", "MEDIUM", "HIGH")[1 + findInterval(speed_limit, c(31, 46))], levels = c("LOW", "MEDIUM", "HIGH")),
+    injury_severity = factor(injury_severity, ordered_injury)
+  ) %>%
+  group_by(speed_limit, injury_severity) %>%
+  tally() %>%
+  rename(`Speed Limit` = speed_limit, `Injury Severity` = injury_severity) %>%
+  ggplot() +
+  geom_bar(aes(x = `Injury Severity`, weight = n, fill = `Speed Limit`), position = "fill") +
+  basic_theme +
+  theme(legend.position = "top") +
+  ggtitle("Injuries and Speed Limits") + 
+  ylab("Proportion")
+```
+---
+```{r}
+ordered_levels <- drivers %>%
+  count(vehicle_body_type) %>%
+  arrange(desc(n)) %>%
+  pull(vehicle_body_type)
+drivers %>%
+  mutate(`Body Type` = factor(as.character(fct_collapse(vehicle_body_type, OTHER = ordered_levels[-(1:5)])), c(ordered_levels[1:5], "OTHER"))) %>%
+  ggplot() +
+  stat_count(aes(x = `Body Type`), fill = single_color) +
+  ggtitle("Vehicle Body Types") +
+  basic_theme
+```
+---
+```{r}
+ordered_levels <- non_motorists %>%
+  count(pedestrian_type) %>%
+  arrange(desc(n)) %>%
+  pull(pedestrian_type)
+non_motorists %>%
+  mutate(pedestrian_type = factor(pedestrian_type, ordered_levels)) %>%
+  ggplot() +
+  stat_count(aes(x = pedestrian_type), fill = single_color) +
+  basic_theme +
+  ggtitle("Types of Non-Motorists")
+```
+---
+```{r}
+pal <- colorFactor(c("blue", "red"), domain = c(0, 1))
+non_motorists %>%
+  leaflet() %>%
+  addTiles() %>%
+  addCircleMarkers(lng = ~longitude, lat = ~latitude, radius = 3, stroke = TRUE, weight = 2, opacity = 1, color = ~ pal(not_in_county))
+```
