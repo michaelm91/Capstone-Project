@@ -4,3 +4,4 @@
 *.csv
 key.txt
 .Rproj.user
+*.Rhistory

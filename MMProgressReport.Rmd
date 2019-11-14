@@ -199,11 +199,13 @@ drivers %>%
   tally() %>%
   rename(`Speed Limit` = speed_limit, `Injury Severity` = injury_severity) %>%
   ggplot() +
-  geom_bar(aes(x = `Speed Limit`, weight = n, fill = `Injury Severity`), position = "fill") +
+  geom_bin2d(aes(x = `Speed Limit`, fill = log(n), y = `Injury Severity`)) +
+  geom_text(aes(x = `Speed Limit`, label = n, y = `Injury Severity`)) +
   basic_theme +
-  theme(legend.position = "top") +
-  ggtitle("Driver Injuries and Speed Limits") + 
-  ylab("Proportion")
+  scale_fill_gradient(low = "#ece7f2",
+                      high = "#a6bddb") +
+  theme(panel.grid.major.y = element_blank()) +
+  ggtitle("Driver Injuries and Speed Limits")
 ```
 
 ```{r}

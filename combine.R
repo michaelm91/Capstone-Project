@@ -34,3 +34,5 @@ combo_table <- incidents %>%
   full_join(d_join, by = "report_number") %>%
   full_join(nm_join, by = "report_number") %>%
   mutate_at(vars(incident_hour:nm_injury_severity_fatal_injury), function(x) if_else(is.na(x), 0, as.double(x)))
+
+feather::write_feather(combo_table, "combo.feather")

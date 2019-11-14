@@ -32,11 +32,26 @@ basic_theme <- theme(
 )
 ```
 
+## Automated Crash Reporting System
+
+- 3 Datasets (Incidents, Drivers, Non-Motorists)
+- `r nrow(incidents)` incidents since January 1st 2015
+- `r nrow(drivers)` drivers
+- `r nrow(non_motorists)` non-motorists
+- The data is mostly categorical or descriptions
+- Variety of NA encodings in the data (N/A, NA, empty strings)
+
+---
 class: center, top
+## Data Cleaning and Wrangling
 
-# Automated Crash Reporting System
+class: left, middle
+- Identifyied data points with geolocation not in the county
+- Use One-Hot encoding to create dummy variables for certain categorical variables
+- Combine the incidents, drivers, and non-motorists tables into a single combined table with count data per incident
 
-ACRS has logged `r nrow(incidents)` incidents since January 1st 2015.
+---
+## Types of Incidents
 
 ```{r incidenttypes}
 incidents %>%
