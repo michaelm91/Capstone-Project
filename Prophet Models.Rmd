@@ -1,0 +1,91 @@
+---
+title: "Prophet Models"
+author: "Michael Metzler"
+date: "11/20/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.height = 6, fig.width = 12)
+```
+
+```{r loadlibs, message=FALSE}
+library(tidyverse)
+library(magrittr)
+library(prophet)
+```
+
+
+```{r loaddata}
+drivers <- feather::read_feather("drivers.feather")
+incidents <- feather::read_feather("incidents.feather")
+non_motorists <- feather::read_feather("non_motorists.feather")
+combo <- feather::read_feather("combo.feather")
+```
+
+```{r prophetall, message=FALSE, warning=FALSE,results='hide'}
+mcmc_samples <- 1500
+
+temp_data <- incidents %>%
+  count(incident_date) %>%
+  rename(ds = incident_date, y = n) %>%
+  bind_rows(
+    .,
+    data.frame(
+      ds = seq(as.Date("2015-01-01"), max(.$ds), by = "d"),
+      y = 0
+    )
+  ) %>%
+  group_by(ds) %>%
+  summarise(y = sum(y))
+total_model <- prophet(mcmc.samples = mcmc_samples, fit = FALSE) %>%
+  add_country_holidays("US") %>%
+  fit.prophet(df = temp_data)
+future <- total_model %>% make_future_dataframe(periods = 365)
+total_forecast <- predict(total_model, future)
+```
+
+```{r}
+plot(total_model, total_forecast)
+```
+
+```{r fig.height=18,fig.width=12}
+prophet_plot_components(total_model, total_forecast)
+```
+
+```{r fig.width=9}
+dyplot.prophet(total_model, total_forecast)
+```
+
+```{r alcoholprophet, message=FALSE, warning=FALSE,results='hide'}
+temp_data <- incidents %>%
+  filter(driver_substance_abuse_alcohol_present | driver_substance_abuse_alcohol_contributed) %>%
+  count(incident_date) %>%
+  rename(ds = incident_date, y = n) %>%
+  bind_rows(
+    .,
+    data.frame(
+      ds = seq(as.Date("2015-01-01"), max(.$ds), by = "d"),
+      y = 0
+    )
+  ) %>%
+  group_by(ds) %>%
+  summarise(y = sum(y))
+alcohol_model <- prophet(mcmc.samples = mcmc_samples) %>%
+  add_country_holidays("US") %>%
+  fit.prophet(df = temp_data)
+future <- alcohol_model %>% make_future_dataframe(periods = 365)
+alcohol_forecast <- predict(alcohol_model, future)
+```
+
+```{r}
+plot(alcohol_model, alcohol_forecast)
+```
+
+```{r fig.height=18,fig.width=12}
+prophet_plot_components(alcohol_model, alcohol_forecast)
+```
+
+```{r fig.width=9}
+dyplot.prophet(alcohol_model, alcohol_forecast)
+```

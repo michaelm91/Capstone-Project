@@ -1,0 +1,96 @@
+---
+title: "Visuals"
+author: "Michael Metzler"
+date: "11/20/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.height = 6, fig.width = 12)
+```
+
+```{r message=FALSE}
+library(tidyverse)
+library(plotly)
+library(leaflet)
+single_color <- "#3182bd"
+basic_theme <- theme(
+  plot.title = element_text(size = 24, vjust = .5, hjust = .5),
+  axis.title = element_text(size = 16, hjust = .5, vjust = .5),
+  panel.background = element_rect(fill = "white"),
+  legend.position = "none",
+  panel.grid.major.y = element_line(color = "grey75", size = .1, linetype = "solid")
+)
+```
+
+```{r loaddata}
+drivers <- feather::read_feather("drivers.feather")
+incidents <- feather::read_feather("incidents.feather")
+non_motorists <- feather::read_feather("non_motorists.feather")
+combo <- feather::read_feather("combo.feather")
+```
+
+```{r}
+temp <- incidents %>%
+  filter(!not_in_county) %>%
+  mutate(non_motorist_involved = !(related_non_motorist == "N/A"))
+temp1 <- temp %>% filter(non_motorist_involved)
+temp2 <- temp %>% filter(!non_motorist_involved)
+leaflet() %>%
+  addTiles() %>%
+  addCircleMarkers(
+    data = temp2,
+    lng = ~longitude, lat = ~latitude,
+    radius = 3, stroke = TRUE, weight = 2, opacity = 1, color = "blue", group = "Vehicles"
+  ) %>%
+    addCircleMarkers(
+    data = temp1,
+    lng = ~longitude, lat = ~latitude,
+    radius = 3, stroke = TRUE, weight = 2, opacity = 1, color = "red", group = "Non Motorists"
+  ) %>%
+  addLayersControl(overlayGroups = c("Non Motorists", "Vehicles"))
+```
+
+```{r}
+ordered_injury <- drivers %>%
+  count(injury_severity) %>%
+  arrange(desc(n)) %>%
+  pull(injury_severity)
+speed_limit_plot <- drivers %>%
+  mutate(
+    speed_limit = factor(c("LOW", "MEDIUM", "HIGH")[1 + findInterval(speed_limit, c(31, 46))], levels = c("LOW", "MEDIUM", "HIGH")),
+    injury_severity = factor(injury_severity, ordered_injury)
+  ) %>%
+  group_by(speed_limit, injury_severity) %>%
+  tally() %>%
+  rename(`Speed Limit` = speed_limit, `Injury Severity` = injury_severity) %>%
+  ggplot() +
+  geom_bar(aes(x = `Speed Limit`, fill = `Injury Severity`,  weight = n), position = "fill") +
+  basic_theme +
+  theme(legend.position = "top") +
+  ggtitle("Injuries and Speed Limits") +
+  ylab("Proportion")
+ggplotly(speed_limit_plot)
+```
+
+```{r}
+ordered_injury <- drivers %>%
+  count(injury_severity) %>%
+  arrange(desc(n)) %>%
+  pull(injury_severity)
+speed_limit_plot2 <- drivers %>%
+  mutate(
+    speed_limit = factor(as.character(speed_limit), levels = as.character(seq.int(from = 0, to = 70, by = 5))),
+    injury_severity = factor(injury_severity, ordered_injury)) %>%
+  group_by(speed_limit, injury_severity) %>%
+  tally() %>%
+  rename(`Speed Limit` = speed_limit, `Injury Severity` = injury_severity) %>%
+  ggplot() +
+  geom_bar(aes(x = `Speed Limit`, fill = `Injury Severity`,  weight = n), position = "fill") +
+  basic_theme +
+  theme(legend.position = "top") +
+  ggtitle("Injuries and Speed Limits") +
+  ylab("Proportion")
+ggplotly(speed_limit_plot2) %>% layout(legend = list(orientation = 'h'))
+```
+

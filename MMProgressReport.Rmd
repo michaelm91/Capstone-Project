@@ -80,7 +80,7 @@ incidents %>%
   arrange(desc(n)) %>%
   mutate(Rank = row_number()) %>%
   rename(Date = incident_date, `Number of Crashes` = n) %>%
-  filter((Rank < 6)| Date %in% c("12/25","7/4","12/26","12/31","1/1"))  %>%
+  filter((Rank < 6) | Date %in% c("12/25", "7/4", "12/26", "12/31", "1/1")) %>%
   knitr::kable()
 ```
 
@@ -93,7 +93,7 @@ incidents %>%
   scale_x_continuous(
     name = "Time",
     breaks = seq.int(from = 0, to = 24 * 60, by = 120),
-    labels = c(paste0(seq.int(from = 0, to = 22, by = 2), ":00"),"0:00")
+    labels = c(paste0(seq.int(from = 0, to = 22, by = 2), ":00"), "0:00")
   ) +
   ggtitle("Crashes by Time of Day") +
   ylab("") +
@@ -202,8 +202,10 @@ drivers %>%
   geom_bin2d(aes(x = `Speed Limit`, fill = log(n), y = `Injury Severity`)) +
   geom_text(aes(x = `Speed Limit`, label = n, y = `Injury Severity`)) +
   basic_theme +
-  scale_fill_gradient(low = "#ece7f2",
-                      high = "#a6bddb") +
+  scale_fill_gradient(
+    low = "#ece7f2",
+    high = "#a6bddb"
+  ) +
   theme(panel.grid.major.y = element_blank()) +
   ggtitle("Driver Injuries and Speed Limits")
 ```

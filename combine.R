@@ -10,11 +10,11 @@ nm_join <- non_motorists %>%
       c(
         related_non_motorist_pedestrian:related_non_motorist_in_animal_drawn_veh,
         non_motorist_substance_abuse_none_detected:injury_severity_fatal_injury
-        )
-      ),
+      )
+    ),
     sum
-    )
-names(nm_join)[2:length(nm_join)] <- paste0("nm_",names(nm_join)[2:length(nm_join)])
+  )
+names(nm_join)[2:length(nm_join)] <- paste0("nm_", names(nm_join)[2:length(nm_join)])
 
 d_join <- drivers %>%
   group_by(report_number) %>%
@@ -28,7 +28,7 @@ d_join <- drivers %>%
     sum
   )
 
-names(d_join)[2:length(d_join)] <- paste0("d_",names(d_join)[2:length(d_join)])
+names(d_join)[2:length(d_join)] <- paste0("d_", names(d_join)[2:length(d_join)])
 
 combo_table <- incidents %>%
   full_join(d_join, by = "report_number") %>%

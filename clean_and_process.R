@@ -109,7 +109,7 @@ incidents <- incidents %>%
 
 # remove NA dummy columns
 incidents_na_dummys <- incidents_dummy_cols %>%
-  paste0( "_N/A") %>%
+  paste0("_N/A") %>%
   .[. %in% names(incidents)]
 
 incidents <- incidents %>% select(-incidents_na_dummys)
@@ -143,7 +143,7 @@ drivers <- drivers %>%
 
 # remove NA dummy columns
 drivers_na_dummys <- drivers_dummy_cols %>%
-  paste0( "_N/A") %>%
+  paste0("_N/A") %>%
   .[. %in% names(drivers)]
 drivers <- drivers %>% select(-drivers_na_dummys)
 
@@ -175,7 +175,7 @@ non_motorists <- non_motorists %>%
 # remove NA dummy columns
 
 non_motorists_na_dummys <- non_motorists_dummy_cols %>%
-  paste0( "_N/A") %>%
+  paste0("_N/A") %>%
   .[. %in% names(non_motorists)]
 
 non_motorists <- non_motorists %>% select(-non_motorists_na_dummys)

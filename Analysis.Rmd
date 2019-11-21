@@ -14,7 +14,6 @@ library(tidyverse)
 library(magrittr)
 ```
 
-
 ```{r loaddata}
 drivers <- feather::read_feather("drivers.feather")
 incidents <- feather::read_feather("incidents.feather")
@@ -26,11 +25,11 @@ combo <- feather::read_feather("combo.feather")
 incident_locations <- incidents %>%
   filter(!not_in_county) %>%
   select(longitude, latitude)
-kmeans_list <- lapply(1:15,function(x)kmeans(incident_locations, centers = x, nstart = 25, iter.max = 100))
+kmeans_list <- lapply(1:15, function(x) kmeans(incident_locations, centers = x, nstart = 25, iter.max = 100))
 centroidss <- data.frame(
   centroids = 1:15,
-  sum_of_squares = sapply(1:15,function(x)kmeans_list[[x]]$tot.withinss)
-  )
+  sum_of_squares = sapply(1:15, function(x) kmeans_list[[x]]$tot.withinss)
+)
 centroidss %>%
   ggplot(aes(x = centroids, y = sum_of_squares)) +
   geom_line()
@@ -42,10 +41,10 @@ centroidss %>% knitr::kable()
 
 ```{r clusterplots}
 incident_clusters <- incident_locations
-for(x in 1:15){
-  incident_clusters$cluster <- 
+for (x in 1:15) {
+  incident_clusters$cluster <-
     as.factor(paste0("cluster", kmeans_list[[x]]$cluster))
-  temp <-incident_clusters %>%
+  temp <- incident_clusters %>%
     ggplot(aes(x = longitude, y = latitude, color = cluster)) +
     geom_point()
   temp %>% print()
@@ -53,27 +52,31 @@ for(x in 1:15){
 ```
 
 ```{r ctfunction}
-contingency_table <- function(data, var1, var2){
-data %>%
-  group_by(!!enquo(var1), !!enquo(var2)) %>%
-  tally() %>%
-  ggplot() +
-  geom_bin2d(aes(x = !!enquo(var1), fill = log(n), y = !!enquo(var2))) +
-  geom_text(aes(x = !!enquo(var1), label = n, y = !!enquo(var2))) +
-  scale_fill_gradient(low = "#ece7f2",
-                      high = "#a6bddb") +
-  theme(
-    panel.grid = element_blank(),
-    legend.position = "none",
-    panel.background = element_rect(fill = "white")
+contingency_table <- function(data, var1, var2) {
+  data %>%
+    group_by(!!enquo(var1), !!enquo(var2)) %>%
+    tally() %>%
+    ggplot() +
+    geom_bin2d(aes(x = !!enquo(var1), fill = log(n), y = !!enquo(var2))) +
+    geom_text(aes(x = !!enquo(var1), label = n, y = !!enquo(var2))) +
+    scale_fill_gradient(
+      low = "#ece7f2",
+      high = "#a6bddb"
+    ) +
+    theme(
+      panel.grid = element_blank(),
+      legend.position = "none",
+      panel.background = element_rect(fill = "white")
     )
 }
 ```
 
 
 ```{r weatherchisq}
-temp <-chisq.test(as.factor(incidents$weather), as.factor(incidents$acrs_report_type))
-temp %>% broom::tidy() %>% knitr::kable()
+temp <- chisq.test(as.factor(incidents$weather), as.factor(incidents$acrs_report_type))
+temp %>%
+  broom::tidy() %>%
+  knitr::kable()
 ```
 
 p-value `r temp$p.value`
@@ -86,15 +89,17 @@ contingency_table(incidents, acrs_report_type, weather)
 ```{r helmetchisq}
 helmet_data <- non_motorists %>%
   filter(as.logical(pedestrian_type_bicyclist)) %>%
-  select(safety_equipment,injury_severity) %>%
-  mutate(safety_equipment = c("no helmet","helmet")[1+as.integer(str_detect(tolower(safety_equipment), "helmet"))])
+  select(safety_equipment, injury_severity) %>%
+  mutate(safety_equipment = c("no helmet", "helmet")[1 + as.integer(str_detect(tolower(safety_equipment), "helmet"))])
 
-temp <-chisq.test(as.factor(helmet_data$safety_equipment), as.factor(helmet_data$injury_severity))
-temp %>% broom::tidy() %>% knitr::kable()
+temp <- chisq.test(as.factor(helmet_data$safety_equipment), as.factor(helmet_data$injury_severity))
+temp %>%
+  broom::tidy() %>%
+  knitr::kable()
 ```
 
 ```{r helmettable}
-contingency_table(helmet_data, safety_equipment,injury_severity)
+contingency_table(helmet_data, safety_equipment, injury_severity)
 ```
 
 
@@ -106,15 +111,17 @@ ordered_injury <- drivers %>%
   arrange(desc(n)) %>%
   pull(injury_severity)
 
-speed_limit_data <-drivers %>%
-  select(speed_limit,injury_severity) %>%
+speed_limit_data <- drivers %>%
+  select(speed_limit, injury_severity) %>%
   mutate(
     speed_limit = factor(c("Under 35", "35 - 45", "50+")[1 + findInterval(speed_limit, c(31, 46))], levels = c("Under 35", "35 - 45", "50+")),
     injury_severity = factor(injury_severity, ordered_injury)
   )
 
-temp <-chisq.test(as.factor(speed_limit_data$speed_limit), as.factor(speed_limit_data$injury_severity))
-temp %>% broom::tidy() %>% knitr::kable()
+temp <- chisq.test(as.factor(speed_limit_data$speed_limit), as.factor(speed_limit_data$injury_severity))
+temp %>%
+  broom::tidy() %>%
+  knitr::kable()
 ```
 
 p-value `r temp$p.value`
@@ -122,43 +129,64 @@ p-value `r temp$p.value`
 ```{r speedtable}
 contingency_table(speed_limit_data, speed_limit, injury_severity)
 ```
-```{r prophetall, echo=FALSE}
-library(prophet)
-temp_data <- incidents %>%
-  count(incident_date) %>% 
-  rename(ds = incident_date, y = n)
-total_model <- prophet(mcmc.samples = 100, fit = FALSE) %>%
-  add_country_holidays("US") %>%
-  fit.prophet(df = temp_data)
-future <- total_model %>% make_future_dataframe(periods = 365)
-forecast <- predict(total_model, future)
+
+```{r}
+temp <- combo %>%
+  filter(
+    road_division %in% c(
+      "TWO-WAY, NOT DIVIDED WITH A CONTINUOUS LEFT TURN",
+      "ONE-WAY TRAFFICWAY", "TWO-WAY, DIVIDED",
+      "UNPROTECTED PAINTED MIN 4 FEET",
+      "TWO-WAY, DIVIDED, POSITIVE MEDIAN BARRIER",
+      "TWO-WAY, NOT DIVIDED"
+    )
+  ) %>%
+  mutate(
+    severity_index =
+      d_vehicle_damage_extent_functional +
+        2 * d_vehicle_damage_extent_superficial +
+        4 * d_vehicle_damage_extent_disabling +
+        6 * d_vehicle_damage_extent_destroyed +
+        10 * d_injury_severity_fatal_injury +
+        8 * d_injury_severity_suspected_serious_injury +
+        4 * d_injury_severity_suspected_minor_injury +
+        2 * d_injury_severity_possible_injury +
+        10 * nm_injury_severity_fatal_injury +
+        8 * nm_injury_severity_suspected_serious_injury +
+        4 * nm_injury_severity_suspected_minor_injury +
+        2 * nm_injury_severity_possible_injury,
+    road_division = as.factor(road_division)
+  )
+division_test_anova <- aov(severity_index ~ road_division, data = temp)
+broom::tidy(division_test_anova) %>% rmarkdown::paged_table()
+#division_test_kruskal <- kruskal.test(severity_index ~ road_division, data = temp)
 ```
 
 ```{r}
-plot(total_model, forecast)
+plot(division_test_anova, 1)
 ```
 
 ```{r}
-prophet_plot_components(total_model, forecast)
+ggplot(temp) + geom_density(aes(x = severity_index))
 ```
 
-```{r alcoholprophet, echo=FALSE}
-temp_data <- incidents %>%
-  filter(driver_substance_abuse_alcohol_present | driver_substance_abuse_alcohol_contributed) %>% 
-  count(incident_date) %>% 
-  rename(ds = incident_date, y = n)
-alcohol_model <- prophet(mcmc.samples = 100) %>%
-  add_country_holidays("US") %>%
-  fit.prophet(df = temp_data)
-future <- alcohol_model %>% make_future_dataframe(periods = 365)
-forecast <- predict(alcohol_model, future)
+
+```{r}
+qqnorm(temp$severity_index)
+```
+
+
+```{r}
+plot(division_test_anova, 2)
 ```
 
 ```{r}
-plot(alcohol_model, forecast)
+division_test_oneway <- oneway.test(severity_index ~ road_division, data = temp)
+broom::tidy(division_test_oneway) %>% rmarkdown::paged_table()
 ```
+
 
 ```{r}
-prophet_plot_components(alcohol_model, forecast)
+division_test_pairwiset <- pairwise.t.test(temp$severity_index, temp$road_division, p.adjust.method = "BH", pool.sd = FALSE)
+broom::tidy(division_test_pairwiset) %>% rmarkdown::paged_table()
 ```
-

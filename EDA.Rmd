@@ -70,7 +70,7 @@ incidents %>%
   scale_x_continuous(
     name = "Time",
     breaks = seq.int(from = 0, to = 24 * 60, by = 120),
-    labels = c(paste0(seq.int(from = 0, to = 22, by = 2), ":00"),"0:00")
+    labels = c(paste0(seq.int(from = 0, to = 22, by = 2), ":00"), "0:00")
   ) +
   ggtitle("Crashes by Time of Day") +
   basic_theme
@@ -307,7 +307,7 @@ drivers %>%
   geom_bar(aes(x = `Injury Severity`, weight = n, fill = `Speed Limit`), position = "fill") +
   basic_theme +
   theme(legend.position = "top") +
-  ggtitle("Injuries and Speed Limits") + 
+  ggtitle("Injuries and Speed Limits") +
   ylab("Proportion")
 ```
 
@@ -433,37 +433,84 @@ non_motorists %>%
 # Consistency Check
 
 ```{r}
-fatal_drivers<-drivers %>% filter(injury_severity_fatal_injury == 1) %>% pull(report_number)
-fatal_nonm <- non_motorists %>% filter(injury_severity_fatal_injury == 1) %>% pull(report_number)
-fatal_acrs <- incidents %>% filter(acrs_report_type_fatal_crash == 1) %>% pull(report_number)
+fatal_drivers <- drivers %>%
+  filter(injury_severity_fatal_injury == 1) %>%
+  pull(report_number)
+fatal_nonm <- non_motorists %>%
+  filter(injury_severity_fatal_injury == 1) %>%
+  pull(report_number)
+fatal_acrs <- incidents %>%
+  filter(acrs_report_type_fatal_crash == 1) %>%
+  pull(report_number)
 recorded_fatal <- c(fatal_drivers, fatal_nonm)
 # vector of fatal reports with no recorded fatality
 probs <- fatal_acrs %>% .[!. %in% recorded_fatal]
 ```
 
 ```{r}
-incidents %>% filter(report_number %in% probs) %>% DT::datatable(options = list(pageLength = 5))
+incidents %>%
+  filter(report_number %in% probs) %>%
+  DT::datatable(options = list(pageLength = 5))
 ```
 
 ```{r}
-drivers %>% filter(report_number %in% probs) %>% DT::datatable(options = list(pageLength = 5))
+drivers %>%
+  filter(report_number %in% probs) %>%
+  DT::datatable(options = list(pageLength = 5))
 ```
 
 ```{r}
-non_motorists %>% filter(report_number %in% probs) %>% DT::datatable(options = list(pageLength = 5))
+non_motorists %>%
+  filter(report_number %in% probs) %>%
+  DT::datatable(options = list(pageLength = 5))
 ```
 ```{r}
-drivers %>% group_by(report_number) %>% tally() %>% arrange(desc(n))
+drivers %>%
+  group_by(report_number) %>%
+  tally() %>%
+  arrange(desc(n))
 ```
 
 ```{r}
-drivers %>% count(report_number) %>% count(n) %>% rename(`Vehicles Involved` = n) %>% knitr::kable()
+drivers %>%
+  count(report_number) %>%
+  count(n) %>%
+  rename(`Vehicles Involved` = n) %>%
+  knitr::kable()
 ```
 ```{r}
-non_motorists %>% group_by(report_number) %>% tally() %>% arrange(desc(n))
+non_motorists %>%
+  group_by(report_number) %>%
+  tally() %>%
+  arrange(desc(n))
 ```
 
 ```{r}
-non_motorists %>% count(report_number) %>% count(n) %>% rename(`non_motorists Involved` = n) %>% knitr::kable()
+non_motorists %>%
+  count(report_number) %>%
+  count(n) %>%
+  rename(`non_motorists Involved` = n) %>%
+  knitr::kable()
+```
+
+```{r}
+fatal_rate <- drivers %>%
+  select(report_number, speed_limit) %>% group_by(report_number) %>%
+  summarise(speed_limit = max(speed_limit)) %>% full_join(incidents) %>% group_by(speed_limit) %>% summarise(fatal_prop = mean(acrs_report_type_fatal_crash), count = n(), fatal_crashes = sum(acrs_report_type_fatal_crash))
+
+fatal_rate %>% filter(!is.na(speed_limit)) %>% ggplot() + geom_line(aes(x = speed_limit, y = fatal_prop))
+```
+```{r}
+temp <- fatal_rate %>% filter(speed_limit > 25)
+prop.test(temp$fatal_crashes, temp$count)
+```
+
+```{r}
+temp <- fatal_rate %>% filter(speed_limit > 25) %>% filter(speed_limit != 50)
+prop.test(temp$fatal_crashes, temp$count)
+```
+
+```{r}
 
 ```
+

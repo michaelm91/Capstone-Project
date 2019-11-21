@@ -73,7 +73,7 @@ incidents %>%
   scale_x_continuous(
     name = "Time",
     breaks = seq.int(from = 0, to = 24 * 60, by = 120),
-    labels = c(paste0(seq.int(from = 0, to = 22, by = 2), ":00"),"0:00")
+    labels = c(paste0(seq.int(from = 0, to = 22, by = 2), ":00"), "0:00")
   ) +
   ggtitle("Crashes by Time of Day") +
   basic_theme
@@ -128,7 +128,7 @@ incidents %>%
   group_by(weather) %>%
   count() %>%
   arrange(desc(n)) %>%
-  knitr::kable(format="html")
+  knitr::kable(format = "html")
 ```
 
 ---
@@ -226,7 +226,7 @@ drivers %>%
   geom_bar(aes(x = `Injury Severity`, weight = n, fill = `Speed Limit`), position = "fill") +
   basic_theme +
   theme(legend.position = "top") +
-  ggtitle("Injuries and Speed Limits") + 
+  ggtitle("Injuries and Speed Limits") +
   ylab("Proportion")
 ```
 ---

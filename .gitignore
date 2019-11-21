@@ -4,4 +4,5 @@
 *.csv
 key.txt
 .Rproj.user
-*.Rhistory
+.Rhistory
+*checkpoint.ipynb

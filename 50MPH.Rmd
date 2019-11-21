@@ -1,0 +1,59 @@
+---
+title: "50 MPH"
+author: "Michael Metzler"
+date: "11/20/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE}
+library(tidyverse)
+drivers <- feather::read_feather("drivers.feather")
+incidents <- feather::read_feather("incidents.feather")
+non_motorists <- feather::read_feather("non_motorists.feather")
+combo <- feather::read_feather("combo.feather")
+```
+
+```{r}
+incidents_speeds <- drivers %>%
+  select(report_number, speed_limit) %>%
+  group_by(report_number) %>%
+  summarise(speed_limit = max(speed_limit)) %>%
+  full_join(incidents)
+fatal_rate <- incidents_speeds %>%
+  group_by(speed_limit) %>%
+  summarise(
+    fatal_prop = mean(acrs_report_type_fatal_crash),
+    total_count = n(),
+    fatal_count = sum(acrs_report_type_fatal_crash)
+    ) %>% filter(!is.na(speed_limit))
+  
+
+fatal_rate %>% ggplot() + geom_line(aes(x = speed_limit, y = fatal_prop))
+```
+```{r}
+temp <- fatal_rate %>% filter(speed_limit > 25 & speed_limit < 55)
+prop.test(temp$fatal_count, temp$total_count)
+```
+
+```{r}
+temp <- fatal_rate %>% filter(speed_limit > 25 & speed_limit < 55) %>% filter(speed_limit != 50)
+prop.test(temp$fatal_count, temp$total_count)
+```
+
+```{r}
+temp <- fatal_rate %>% filter(speed_limit > 25)
+temp$excluded_p <- 0
+for(index in 1:nrow(temp))
+  temp$excluded_p[index] <- temp %>% filter(row_number() != index) %>%
+  (function(x)prop.test(x$fatal_count,x$total_count)$p.value)
+temp
+```
+
+```{r}
+incidents_speeds %>% filter(speed_limit == 50) %>% skimr::skim()
+```
+
