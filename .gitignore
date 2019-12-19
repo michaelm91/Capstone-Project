@@ -6,3 +6,4 @@ key.txt
 .Rproj.user
 .Rhistory
 *checkpoint.ipynb
+ignore/*
