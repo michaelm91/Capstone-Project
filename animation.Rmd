@@ -1,0 +1,100 @@
+---
+title: "animation"
+author: "Michael Metzler"
+date: "12/4/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r loaddata}
+library(tidyverse)
+library(gganimate)
+library(ggmap)
+drivers <- feather::read_feather("drivers.feather")
+incidents <- feather::read_feather("incidents.feather")
+non_motorists <- feather::read_feather("non_motorists.feather")
+combo <- feather::read_feather("combo.feather")
+```
+
+```{r}
+moco_north <- 39.35
+moco_south <- 38.93
+moco_east <- -76.89
+moco_west <- -77.53
+ns_center <- (moco_north + moco_south)/2
+ew_center <- (moco_east + moco_west)/2
+ns_size <- moco_north - moco_south
+ew_size <- ns_size * 16/9
+eee <- ew_center + (ew_size/2)
+www <- ew_center - (ew_size/2)
+pic <- get_stamenmap(bbox = c(left = www, bottom = moco_south, right = eee, top = moco_north), maptype = "toner-lines", zoom = 11) %>%
+  ggmap(extent = "device",padding = 0) +
+  theme(
+    panel.background = element_blank(), panel.grid = element_blank(), 
+    axis.title = element_blank(),axis.text = element_blank(),axis.ticks = element_blank()
+    )
+#ggsave("pres_background.png", plot = pic, width = 12.80, height = 7.20, units = "in")
+moco_map <- get_stamenmap(bbox = c(left = www, bottom = moco_south, right = eee, top = moco_north), maptype = "terrain-lines", zoom = 11)
+```
+
+
+```{r datamanipulation}
+#use for testing only
+#incidents <- incidents %>% filter(crash_date_time < lubridate::make_datetime(year = 2015, month = 4,day = 1, tz = "EST"))
+
+frame_count <- incidents %>%
+  pull(incident_date) %>%
+  unique() %>% 
+  length()
+
+last_date <- incidents$incident_date %>% max()
+
+temp <- incidents %>%
+  filter(!not_in_county) %>%
+  select(incident_date, latitude,longitude, acrs_report_type_fatal_crash)
+
+lag_time <- 30
+i_date <- integer((lag_time + 1) * nrow(temp))
+class(i_date) <- "Date"
+lat <- double((lag_time + 1) * nrow(temp))
+long <- double((lag_time + 1) * nrow(temp))
+alpha_val <- double((lag_time + 1) * nrow(temp))
+col_val <- double((lag_time + 1) * nrow(temp))
+
+alpha_scale <- (lag_time:0)/lag_time
+lag_period <- 0:lag_time
+    
+for(record in 1:nrow(temp)){
+  indices <- 1 + (record - 1) * (lag_time + 1) + lag_period
+    i_date[indices] <- temp$incident_date[record] + lag_period
+    lat[indices] <- temp$latitude[record]
+    long[indices] <- temp$longitude[record]
+    alpha_val[indices] <- alpha_scale
+    col_val[indices] <- c("a","z")[1+temp$acrs_report_type_fatal_crash[record]]
+}
+anim_data <- data.frame(i_date, lat, long, alpha_val, col_val)
+```
+
+```{r animate}
+temp_data <- anim_data %>%
+  filter(i_date <= last_date)
+
+temp <- ggmap(moco_map) +
+  geom_point(data = temp_data, aes(x = long, y = lat, alpha = alpha_val, color = col_val)) +
+  scale_color_manual(values = c("black","red")) +
+  theme(
+    legend.position = "none",
+    axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(),
+    panel.background = element_blank(), panel.grid = element_blank(),
+    plot.title = element_text(size = 20 , hjust = .5)
+  ) +
+  transition_time(i_date) +
+  labs(
+    title = "{frame_time}"
+  )
+
+temp %>% animate(nframes = frame_count, fps = 30, end_pause = 30, width = 960, height = 720)
+```

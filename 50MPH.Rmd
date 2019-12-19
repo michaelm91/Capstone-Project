@@ -9,38 +9,85 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r message=FALSE}
+```{r message=FALSE, echo=FALSE}
 library(tidyverse)
 drivers <- feather::read_feather("drivers.feather")
 incidents <- feather::read_feather("incidents.feather")
 non_motorists <- feather::read_feather("non_motorists.feather")
 combo <- feather::read_feather("combo.feather")
+single_color <- "#3182bd"
+basic_theme <- theme(
+  plot.title = element_text(size = 24, vjust = .5, hjust = .5),
+  axis.title = element_text(size = 16, hjust = .5, vjust = .5),
+  panel.background = element_rect(fill = "white"),
+  legend.position = "none",
+  panel.grid.major.y = element_line(color = "grey75", size = .1, linetype = "solid")
+)
 ```
 
-```{r}
+```{r message=FALSE}
 incidents_speeds <- drivers %>%
   select(report_number, speed_limit) %>%
   group_by(report_number) %>%
   summarise(speed_limit = max(speed_limit)) %>%
   full_join(incidents)
-fatal_rate <- incidents_speeds %>%
+
+combo_speeds <- drivers %>%
+  select(report_number, speed_limit) %>%
+  group_by(report_number) %>%
+  summarise(speed_limit = max(speed_limit)) %>%
+  full_join(combo)
+
+fatal_rate <- combo_speeds %>%
   group_by(speed_limit) %>%
   summarise(
     fatal_prop = mean(acrs_report_type_fatal_crash),
     total_count = n(),
     fatal_count = sum(acrs_report_type_fatal_crash)
-    ) %>% filter(!is.na(speed_limit))
-  
-
-fatal_rate %>% ggplot() + geom_line(aes(x = speed_limit, y = fatal_prop))
+    ) %>% 
+  filter(!is.na(speed_limit))
 ```
+
 ```{r}
-temp <- fatal_rate %>% filter(speed_limit > 25 & speed_limit < 55)
+serious_injury_rate <- combo_speeds %>%
+  group_by(speed_limit) %>%
+  mutate(serious_injury = as.numeric(d_injury_severity_suspected_serious_injury > 0)) %>%
+  summarise(
+    injury_prop = mean(serious_injury),
+    total_count = n(),
+    injury_count = sum(serious_injury)
+    ) %>%
+  filter(!is.na(speed_limit))
+```
+
+```{r}
+fatal_rate %>% ggplot() + geom_line(aes(x = speed_limit, y = fatal_prop), color = single_color, size = 2) +
+  scale_x_continuous(name = "Speed Limit", breaks = 10*(0:7)) +
+  scale_y_continuous(
+    name = "Fatal Incident Rate",
+    breaks = seq(from = 0, to = .012, by = .002), labels = function(x) paste0(x * 100,"%")
+    ) +
+  basic_theme +
+  theme(panel.grid.major.x = element_line(color = "grey75", size = .1, linetype = "solid")) +
+  ggtitle("Proportion of Incidents Resulting in Fatality")
+```
+
+```{r}
+serious_injury_rate %>% ggplot() +
+  geom_line(aes(x = speed_limit, y = injury_prop), color = single_color, size = 2) +
+  scale_x_continuous(name = "Speed Limit", breaks = 10*(0:7)) +
+  scale_y_continuous(name = "Serious Injury Rate", breaks = .01 *(0:4), labels = paste0(0:4,"%")) +
+  basic_theme +
+  theme(panel.grid.major.x = element_line(color = "grey75", size = .1, linetype = "solid"))
+```
+
+```{r warning=FALSE, message=FALSE}
+temp <- fatal_rate %>% filter(speed_limit > 25)
 prop.test(temp$fatal_count, temp$total_count)
 ```
 
-```{r}
-temp <- fatal_rate %>% filter(speed_limit > 25 & speed_limit < 55) %>% filter(speed_limit != 50)
+```{r warning=FALSE,message=FALSE}
+temp <- fatal_rate %>% filter(speed_limit > 25, speed_limit != 50)
 prop.test(temp$fatal_count, temp$total_count)
 ```
 
@@ -50,10 +97,114 @@ temp$excluded_p <- 0
 for(index in 1:nrow(temp))
   temp$excluded_p[index] <- temp %>% filter(row_number() != index) %>%
   (function(x)prop.test(x$fatal_count,x$total_count)$p.value)
-temp
+temp %>% rmarkdown::paged_table()
+```
+```{r}
+fatal_roads <- incidents %>% filter(acrs_report_type_fatal_crash == 1) %>% count(road_name) %>% rename(fatal_incidents = n)
+
+incidents %>% 
+  count(road_name) %>% 
+  rename(total_incidents = n) %>% 
+  full_join(fatal_roads) %>%
+  mutate_if(is.integer,function(x)if_else(is.na(x),as.integer(0),x)) %>%
+  filter(total_incidents > 25) %>%
+  mutate(fatal_prop = fatal_incidents/total_incidents) %>%
+  arrange(desc(fatal_prop)) %>%
+  DT::datatable()
+```
+
+## Only Driver Fatalities
+
+```{r}
+full_fatal_rate <- combo_speeds %>%
+  mutate(
+    driver_fatality = as.numeric(d_injury_severity_fatal_injury > 0),
+    nm_fatality = as.numeric(nm_injury_severity_fatal_injury > 0)) %>%
+  group_by(speed_limit) %>%
+  summarise(
+    any_fatal_prop = mean(acrs_report_type_fatal_crash),
+    any_fatal_count = sum(acrs_report_type_fatal_crash),
+    driver_fatal_prop = mean(driver_fatality),
+    driver_fatal_count = sum(driver_fatality),
+    vehicle_fatal_rate = mean(acrs_report_type_fatal_crash & !nm_fatality),
+    vehicle_fatal_count = sum(acrs_report_type_fatal_crash & !nm_fatality),
+    nm_fatal_prop = mean(nm_fatality),
+    nm_fatal_count = sum(nm_fatality),
+    total_count = n()
+    ) %>% 
+  filter(!is.na(speed_limit))
 ```
 
 ```{r}
-incidents_speeds %>% filter(speed_limit == 50) %>% skimr::skim()
+full_fatal_rate %>% ggplot() + geom_line(aes(x = speed_limit, y = driver_fatal_prop), color = single_color, size = 2) +
+  scale_x_continuous(name = "Speed Limit", breaks = 10*(0:7)) +
+  scale_y_continuous(
+    name = "Fatal Incident Rate",
+    breaks = seq(from = 0, to = .012, by = .002), labels = function(x) paste0(x * 100,"%")
+    ) +
+  basic_theme +
+  theme(panel.grid.major.x = element_line(color = "grey75", size = .1, linetype = "solid")) +
+  ggtitle("Driver Fatality Rates")
+```
+
+```{r}
+full_fatal_rate %>% ggplot() + geom_line(aes(x = speed_limit, y = nm_fatal_prop), color = single_color, size = 2) +
+  scale_x_continuous(name = "Speed Limit", breaks = 10*(0:7)) +
+  scale_y_continuous(
+    name = "Fatal Incident Rate",
+    breaks = seq(from = 0, to = .012, by = .002), labels = function(x) paste0(x * 100,"%")
+    ) +
+  basic_theme +
+  theme(panel.grid.major.x = element_line(color = "grey75", size = .1, linetype = "solid")) +
+  ggtitle("Non Motorist Fatality Rates")
+```
+
+```{r}
+temp <- full_fatal_rate %>% filter(speed_limit > 25)
+prop.test(temp$driver_fatal_count, temp$total_count)
+```
+
+```{r}
+temp <- full_fatal_rate %>% filter(speed_limit > 25, speed_limit != 50)
+prop.test(temp$driver_fatal_count, temp$total_count)
+```
+
+```{r}
+temp <- full_fatal_rate %>% filter(speed_limit > 25)
+temp$excluded_p <- 0
+for(index in 1:nrow(temp))
+  temp$excluded_p[index] <- temp %>% filter(row_number() != index) %>%
+  (function(x)prop.test(x$driver_fatal_count,x$total_count)$p.value)
+temp %>% select(speed_limit,driver_fatal_prop,driver_fatal_count,total_count,excluded_p)%>% rmarkdown::paged_table()
+```
+```{r}
+temp <- full_fatal_rate %>% filter(speed_limit > 25)
+temp$excluded_p <- 0
+for(index in 1:nrow(temp))
+  temp$excluded_p[index] <- temp %>%
+  filter(row_number() != index) %>%
+  (function(x)prop.test(x$vehicle_fatal_count, x$total_count)$p.value)
+temp %>% rmarkdown::paged_table()
+```
+
+```{r}
+combo_speeds %>%
+  filter(d_injury_severity_fatal_injury == 1) %>%
+  group_by(speed_limit) %>%
+  count(collision_type) %>%
+  group_by(speed_limit) %>% 
+  mutate(prop = n/sum(n))
+```
+
+```{r}
+drivers %>%
+  filter(vehicle_year > 1990 & vehicle_year <= incident_year + 1) %>% 
+  mutate(car_age = incident_year - vehicle_year, injury = injury_severity_fatal_injury | injury_severity_suspected_serious_injury) %>% 
+  group_by(injury,car_age) %>%
+  tally() %>%
+  group_by(car_age) %>% 
+  summarize(total = sum(n), fatal_rate = sum(injury * n)/total) %>%
+  ggplot() +
+  geom_path(aes(x = car_age, y = fatal_rate), color = single_color, size = 2) + basic_theme + ggtitle("Are older cars less safe?")
 ```
 

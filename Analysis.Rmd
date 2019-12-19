@@ -105,6 +105,32 @@ contingency_table(helmet_data, safety_equipment, injury_severity)
 
 ## Speed Limits
 
+```{r speeds}
+ordered_injury <- drivers %>%
+  count(injury_severity) %>%
+  arrange(desc(n)) %>%
+  pull(injury_severity)
+
+speed_limit_data <- drivers %>%
+  select(speed_limit, injury_severity) %>%
+  filter(speed_limit > 20 & speed_limit < 60) %>%
+  mutate(
+    `Speed Limit` = factor(speed_limit),
+    `Injury Severity` = factor(injury_severity, ordered_injury)
+  )
+
+temp <- chisq.test(as.factor(speed_limit_data$speed_limit), as.factor(speed_limit_data$injury_severity))
+temp %>%
+  broom::tidy() %>%
+  knitr::kable()
+```
+
+p-value `r temp$p.value`
+
+```{r speedstable}
+contingency_table(speed_limit_data, `Speed Limit`, `Injury Severity`)
+```
+
 ```{r speedchisq}
 ordered_injury <- drivers %>%
   count(injury_severity) %>%
@@ -128,6 +154,32 @@ p-value `r temp$p.value`
 
 ```{r speedtable}
 contingency_table(speed_limit_data, speed_limit, injury_severity)
+```
+
+```{r alc}
+ordered_injury <- drivers %>%
+  count(injury_severity) %>%
+  arrange(desc(n)) %>%
+  pull(injury_severity)
+
+alc_data <- drivers %>%
+  mutate(
+    alc = driver_substance_abuse_alcohol_contributed | driver_substance_abuse_alcohol_present,
+    injury_severity = factor(injury_severity, ordered_injury)
+  ) %>%
+  select(report_number,alc, injury_severity) %>%
+  group_by(report_number) %>%
+  summarise(alc = any(alc), injury_severity = ordered_injury[max(as.integer(injury_severity))]) %>%
+  mutate(injury_severity = factor(injury_severity,ordered_injury))
+
+temp <- chisq.test(as.factor(alc_data$alc), as.factor(alc_data$injury_severity))
+temp %>%
+  broom::tidy() %>%
+  knitr::kable()
+```
+
+```{r alctable}
+contingency_table(alc_data, alc, injury_severity)
 ```
 
 ```{r}
@@ -174,7 +226,6 @@ ggplot(temp) + geom_density(aes(x = severity_index))
 ```{r}
 qqnorm(temp$severity_index)
 ```
-
 
 ```{r}
 plot(division_test_anova, 2)

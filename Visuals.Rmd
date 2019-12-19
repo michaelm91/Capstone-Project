@@ -13,6 +13,7 @@ knitr::opts_chunk$set(echo = TRUE, fig.height = 6, fig.width = 12)
 library(tidyverse)
 library(plotly)
 library(leaflet)
+library(ggmap)
 single_color <- "#3182bd"
 basic_theme <- theme(
   plot.title = element_text(size = 24, vjust = .5, hjust = .5),
@@ -29,6 +30,42 @@ incidents <- feather::read_feather("incidents.feather")
 non_motorists <- feather::read_feather("non_motorists.feather")
 combo <- feather::read_feather("combo.feather")
 ```
+
+```{r maps}
+moco_north <- 39.35
+moco_south <- 38.93
+moco_east <- -76.89
+moco_west <- -77.53
+ns_center <- (moco_north + moco_south)/2
+ew_center <- (moco_east + moco_west)/2
+ns_size <- moco_north - moco_south
+ew_size <- ns_size * 16/9
+eee <- ew_center + (ew_size/2)
+www <- ew_center - (ew_size/2)
+pic <- get_stamenmap(bbox = c(left = www, bottom = moco_south, right = eee, top = moco_north), maptype = "toner-lines", zoom = 11) %>%
+  ggmap(extent = "device",padding = 0) +
+  theme(
+    panel.background = element_blank(), panel.grid = element_blank(), 
+    axis.title = element_blank(),axis.text = element_blank(),axis.ticks = element_blank()
+    )
+#ggsave("pres_background.png", plot = pic, width = 12.80, height = 7.20, units = "in")
+moco_map <- get_stamenmap(bbox = c(left = www, bottom = moco_south, right = eee, top = moco_north), maptype = "terrain", zoom = 11)
+```
+
+```{r}
+temp_data <- incidents %>%
+  select(acrs_report_type_fatal_crash, latitude, longitude)
+ggmap(moco_map) +
+  geom_point(data = temp_data %>% filter(acrs_report_type_fatal_crash == 0), aes(x = longitude, y = latitude), size = .2, color = "black") +
+  geom_point(data = temp_data %>% filter(acrs_report_type_fatal_crash == 1), aes(x = longitude, y = latitude), size = 1.5, color = "red") +
+  theme(
+    legend.position = "none",
+    axis.text = element_blank(), axis.ticks = element_blank(), axis.title = element_blank(),
+    panel.background = element_blank(), panel.grid = element_blank(),
+    plot.title = element_text(size = 20 , hjust = .5)
+  )
+```
+
 
 ```{r}
 temp <- incidents %>%
@@ -50,6 +87,29 @@ leaflet() %>%
   ) %>%
   addLayersControl(overlayGroups = c("Non Motorists", "Vehicles"))
 ```
+
+```{r}
+pal <- colorFactor(c("red","orange", "black"), domain = c("Driver", "Non Motorist", "Other"))
+temp <- combo  %>%
+  filter(acrs_report_type_fatal_crash == 1) %>%
+  mutate(
+    fatal_type = case_when(
+      nm_injury_severity_fatal_injury > 0 ~ "Non Motorist",
+      d_injury_severity_fatal_injury > 0 ~ "Driver",
+      TRUE ~ "Other"
+    )
+    )
+leaflet() %>%
+  addTiles() %>%
+  addCircleMarkers(
+    data = temp,
+    lng = ~longitude, lat = ~latitude,
+    radius = 3, stroke = TRUE, weight = 2, opacity = 1, color = ~pal(fatal_type), group = ~fatal_type,
+    popup = ~paste(crash_date_time, road_name, sep = "<br/>")
+  ) %>%
+  addLayersControl(overlayGroups = c("Driver","Non Motorist","Other"))
+```
+
 
 ```{r}
 ordered_injury <- drivers %>%

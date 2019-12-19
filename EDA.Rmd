@@ -509,8 +509,14 @@ prop.test(temp$fatal_crashes, temp$count)
 temp <- fatal_rate %>% filter(speed_limit > 25) %>% filter(speed_limit != 50)
 prop.test(temp$fatal_crashes, temp$count)
 ```
+## Light
 
 ```{r}
-
+incidents %>%
+  group_by(acrs_report_type_fatal_crash,light) %>%
+  tally() %>% 
+  group_by(light) %>%
+  summarise(count = sum(n), rate = sum(acrs_report_type_fatal_crash * n)/count) %>%
+  arrange(desc(rate))
 ```
 
